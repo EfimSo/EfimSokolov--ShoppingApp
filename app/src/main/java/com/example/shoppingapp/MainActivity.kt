@@ -8,13 +8,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,8 +23,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +32,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.shoppingapp.ui.theme.ShoppingAppTheme
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,13 +65,30 @@ fun ShoppingApp(modifier: Modifier = Modifier) {
         Product("Product C", "$200", "Premium product C."),
         Product("Product D", "$1000", "Extremely premium product D.")
     )
-    val portraitOrientation = false // placeholder
+    val windowInfo = calculateCurrentWindowInfo()
+    var i by rememberSaveable  { mutableIntStateOf(-1) }
 
-    if (portraitOrientation){
-        PortraitView(products)
+    val makeProductSelector: (Int) -> () -> Unit = { { i = it } } // Second order function factory for onClick
+    val handleBackButtonClick: () -> Unit = { i = -1 }
+
+//  Set product to null when rendering portrait view
+    LaunchedEffect(Unit) {
+        if (!windowInfo.isWideScreen) handleBackButtonClick()
+    }
+
+    if (windowInfo.isWideScreen){
+        LandScapeView(
+            products, i = i,
+            makeProductSelector = makeProductSelector
+        )
     }
     else{
-        LandScapeView(products)
+        PortraitView(
+            products,
+            i = i,
+            makeProductSelector = makeProductSelector,
+            handleBackButtonClick = handleBackButtonClick
+        )
     }
 }
 
@@ -77,25 +98,43 @@ class Product(
     val description: String
 )
 
+data class WindowInfo(
+    val isWideScreen: Boolean
+)
+
 
 @Composable
-fun PortraitView(products: List<Product>){
-//    ProductList(products)
+fun PortraitView(products: List<Product>, i: Int, makeProductSelector: (Int) -> () -> Unit, handleBackButtonClick: () -> Unit){
+
+    if (i == -1){
+        ProductList(
+            products,
+            makeProductSelector=makeProductSelector
+        )
+    }
+    else{
+        ProductDetails(
+            products[i],
+            portraitOrientation = true,
+            handleBackButtonClick = handleBackButtonClick,
+            modifier = Modifier.fillMaxHeight()
+        )
+    }
 }
 
 @Composable
-fun LandScapeView(products: List<Product>){
+fun LandScapeView(products: List<Product>, i: Int,  makeProductSelector: (Int) -> () -> Unit){
     val defaultProduct = Product("", "Please Select a Product", "")
-    var i by remember { mutableIntStateOf(-1) }
-    val makeSelectProduct: (Int) -> () -> Unit = { it ->
-        { i = it }
-    }
 
         Row {
-        ProductList(products,  modifier = Modifier
+        ProductList(products,
+            modifier = Modifier
             .weight(1f)
-            .fillMaxHeight(), makeSelectProduct = makeSelectProduct)
+            .fillMaxHeight(),
+            makeProductSelector = makeProductSelector)
         ProductDetails(
+            portraitOrientation = false,
+            handleBackButtonClick = { },
             product = if (i == -1){
                 defaultProduct
             }
@@ -111,7 +150,7 @@ fun LandScapeView(products: List<Product>){
 
 
 @Composable
-fun ProductList(products: List<Product>, modifier: Modifier = Modifier, makeSelectProduct:  (Int) -> () -> Unit){
+fun ProductList(products: List<Product>, modifier: Modifier = Modifier, makeProductSelector:  (Int) -> () -> Unit){
     Column (modifier = modifier){
         Text(
             "Product List",
@@ -125,13 +164,15 @@ fun ProductList(products: List<Product>, modifier: Modifier = Modifier, makeSele
             modifier = Modifier.padding(horizontal = 5.dp)
         ) {
             itemsIndexed(products) { index, product ->
-                Card(shape = RoundedCornerShape(8.dp),
+                Card(
+                    onClick = makeProductSelector(index),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .padding(8.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardDefaults.cardColors().containerColor
-                    ),
-                    onClick = makeSelectProduct(index)){
+                    )
+                ){
                     Column(
                         modifier = Modifier
                             .padding(14.dp)
@@ -161,11 +202,10 @@ fun ProductList(products: List<Product>, modifier: Modifier = Modifier, makeSele
 }
 
 @Composable
-fun ProductDetails(product: Product, modifier: Modifier = Modifier){
+fun ProductDetails(product: Product, modifier: Modifier = Modifier, handleBackButtonClick: () -> Unit, portraitOrientation: Boolean){
     Card(
         shape = RoundedCornerShape(8.dp),
         modifier = modifier
-            .aspectRatio(1f)
             .padding(5.dp),
         colors = CardDefaults.cardColors(
             containerColor = CardDefaults.cardColors().containerColor
@@ -173,39 +213,73 @@ fun ProductDetails(product: Product, modifier: Modifier = Modifier){
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
         ) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                horizontalAlignment =  if (portraitOrientation) Alignment.Start else Alignment.CenterHorizontally,
+                verticalArrangement = if (portraitOrientation) Arrangement.Top else Arrangement.Center,
+                modifier = Modifier
+                    .align( if (portraitOrientation) Alignment.TopStart else Alignment.Center)
+                    .padding(top = 30.dp)
             ) {
+                if (portraitOrientation){
+                    TextButton(
+                        onClick = handleBackButtonClick,
+                    )
+                    {
+                        Text("Back", style = TextStyle(
+                        color = Color.Black,
+                        fontSize = 25.sp
+                            )
+                        )
+                    }
+                }
                 Text(
                     text = product.name,
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        color = Color.Black,
+                        fontSize = 40.sp
                     ),
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
                 Text(
                     text = product.price,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 25.sp,
+                        fontSize = 33.sp,
                         color = Color.DarkGray
                     ),
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    modifier = Modifier.padding(start = 12.dp, bottom = 6.dp).fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
                 Text(
                     text = product.description,
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 22.sp,
+                        fontSize = 30.sp,
                         color = Color.Gray,
-                    )
+                        lineHeight = 35.sp
+                    ),
+                    modifier = Modifier.padding(start = 12.dp),
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
     }
 }
+
+@Composable
+fun calculateCurrentWindowInfo(): WindowInfo {
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+
+    val isWideScreen = screenWidth >= 600
+    return WindowInfo(
+        isWideScreen = isWideScreen
+    )
+}
+
 
 @Preview(showBackground = true)
 @Composable
