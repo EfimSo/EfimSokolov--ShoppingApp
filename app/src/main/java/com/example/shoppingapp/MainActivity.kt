@@ -71,11 +71,6 @@ fun ShoppingApp(modifier: Modifier = Modifier) {
     val makeProductSelector: (Int) -> () -> Unit = { { i = it } } // Second order function factory for onClick
     val handleBackButtonClick: () -> Unit = { i = -1 }
 
-//  Set product to null when rendering portrait view
-    LaunchedEffect(Unit) {
-        if (!windowInfo.isWideScreen) handleBackButtonClick()
-    }
-
     if (windowInfo.isWideScreen){
         LandScapeView(
             products, i = i,
